@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
         )
     ) NOT NULL DEFAULT 'student',
     email_verified BOOLEAN NOT NULL DEFAULT 0,
+    verify_token TEXT DEFAULT NULL,
+    verify_expiry TIMESTAMP DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
