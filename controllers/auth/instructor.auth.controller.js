@@ -1,16 +1,16 @@
-import * as z from "zod";
-import crypto from "crypto";
+import * as z from "zod"
+import crypto from "crypto"
+import { InstructorLoginSchema, InstructorRegisterSchema } from "../../models/instructorSchema.model.js"
+import { ResendSchema } from "../../models/resndEmailSchema.model.js"
+import { asyncHandler } from "../../utils/apiHandler.js"
+import { sendVerifyEmail } from "../../utils/sendEmail.js"
 import db from "../../db/index.js"
-import { StudentLoginSchema, StudentRegisterSchema } from "../../models/studentSchema.model.js";
-import { asyncHandler } from "../../utils/apiHandler.js";
-import { sendVerifyEmail } from "../../utils/sendEmail.js";
 import { comparePassword, hashedPassword } from "../../utils/hashPassword.js"
 import { generateToken } from "../../utils/genrateToken.js"
 import { COOKIE_OPTIONS } from "../../constants.js"
-import { ResendSchema } from "../../models/resndEmailSchema.model.js";
 
-export const studentRegisterController = asyncHandler(async (req, res) => {
-    const body = StudentRegisterSchema.safeParse(req.body)
+export const instructorRegisterController = asyncHandler(async (req, res) => {
+    const body = InstructorRegisterSchema.safeParse(req.body)
     if (!body.success) {
         const error = new Error(z.prettifyError(body.error))
         error.statusCode = 400
@@ -20,17 +20,22 @@ export const studentRegisterController = asyncHandler(async (req, res) => {
     const passwordHash = await hashedPassword(password)
     let result;
     try {
-        result = db.prepare("INSERT INTO users (first_name, last_name, email, password_hash, phone_number, role) VALUES (?, ?, ?, ?, ?, 'student')").run(first_name, last_name, email, passwordHash, phone_number)
+        const tx = db.transaction(() => {
+            const r = db.prepare("INSERT INTO users (first_name, last_name, email, password_hash, phone_number, role) VALUES (?, ?, ?, ?, ?, 'instructor')").run(first_name, last_name, email, passwordHash, phone_number)
+            db.prepare("INSERT INTO instructor_profile (user_id) VALUES (?)").run(r.lastInsertRowid)
+            return r;
+        })
+        result = tx();
     } catch (e) {
         if (e.code === "SQLITE_CONSTRAINT_UNIQUE") {
             let message = "Duplicate value";
 
             if (e.message.includes("users.email")) {
-                message = "Student with this email already exists";
+                message = "Instructor with this email already exists";
             }
 
             if (e.message.includes("users.phone_number")) {
-                message = "Student with this phone number already exists";
+                message = "Instructor with this phone number already exists";
             }
 
             const err = new Error(message);
@@ -41,7 +46,7 @@ export const studentRegisterController = asyncHandler(async (req, res) => {
         throw e;
     }
     if (!result || !result.changes) {
-        const error = new Error("Failed to register student")
+        const error = new Error("Failed to register instructor")
         error.statusCode = 500
         throw error
     }
@@ -56,53 +61,58 @@ export const studentRegisterController = asyncHandler(async (req, res) => {
 
     res.status(201).json({
         status: "success",
-        message: "Student registered successfully",
+        message: "Instructor registered successfully",
     })
 })
 
-export const studentLoginController = asyncHandler(async (req, res) => {
-    const body = StudentLoginSchema.safeParse(req.body)
+export const instructorLoginController = asyncHandler(async (req, res) => {
+    const body = InstructorLoginSchema.safeParse(req.body)
     if (!body.success) {
         const error = new Error(z.prettifyError(body.error))
         error.statusCode = 400
         throw error
     }
     const { email, password } = body.data
-    const studentUser = db.prepare("SELECT id, email, password_hash, role, email_verified FROM users WHERE email = ? AND role = 'student'").get(email)
-    if (!studentUser) {
+    const instructorUser = db.prepare("SELECT id, email, password_hash, role, email_verified, admin_verified FROM instructors WHERE email = ? AND role = 'instructor'").get(email)
+    if (!instructorUser) {
         const error = new Error("Invalid email or password")
         error.statusCode = 401
         throw error
     }
-    if (studentUser.role !== "student") {
+    if (instructorUser.role !== "instructor") {
         const error = new Error("You are not authorized to access this resource")
         error.statusCode = 401
         throw error
     }
-    if (!studentUser.email_verified) {
+    if (!instructorUser.admin_verified) {
+        const error = new Error("You are not authorized by admin to access this resource")
+        error.statusCode = 403
+        throw error
+    }
+    if (!instructorUser.email_verified) {
         const error = new Error("Email not verified. Please verify your email before logging in.")
         error.statusCode = 403
         throw error
     }
-    const isPasswordValid = await comparePassword(password, studentUser.password_hash)
+    const isPasswordValid = await comparePassword(password, instructorUser.password_hash)
     if (!isPasswordValid) {
         const error = new Error("Invalid email or password")
         error.statusCode = 401
         throw error
     }
-    const studentToken = generateToken({ id: studentUser.id, email: studentUser.email, role: studentUser.role })
+    const instructorToken = generateToken({ id: instructorUser.id, email: instructorUser.email, role: instructorUser.role })
 
 
-    res.status(200).cookie("studentToken", studentToken, COOKIE_OPTIONS).json({
+    res.status(200).cookie("instructorToken", instructorToken, COOKIE_OPTIONS).json({
         status: "success",
-        message: "Student logged in successfully",
+        message: "Instructor logged in successfully",
         data: {
-            studentToken,
+            instructorToken,
         },
     })
 })
 
-export const studentResendVerifyEmailController = asyncHandler(async (req, res) => {
+export const instructorResendVerifyEmailController = asyncHandler(async (req, res) => {
     const result = ResendSchema.safeParse(req.body);
     if (!result.success) {
         const error = new Error(z.prettifyError(result.error));
@@ -110,9 +120,9 @@ export const studentResendVerifyEmailController = asyncHandler(async (req, res) 
         throw error;
     }
     const { email } = result.data;
-    const studentUser = db.prepare("SELECT id, email, email_verified FROM users WHERE email = ? AND role = 'student'").get(email);
+    const instructorUser = db.prepare("SELECT id, email, email_verified FROM instructors WHERE email = ? AND role = 'instructor'").get(email);
 
-    if (studentUser && !studentUser.email_verified) {
+    if (instructorUser && !instructorUser.email_verified) {
         try {
             await sendVerifyEmail({ to: email });
         } catch (err) {
@@ -126,21 +136,21 @@ export const studentResendVerifyEmailController = asyncHandler(async (req, res) 
 
 })
 
-export const studentVerifyController = asyncHandler(async (req, res) => {
-    const {token} = req.body;
+export const instructorVerifyController = asyncHandler(async (req, res) => {
+    const { token } = req.body;
     if (!token?.trim()) {
         const error = new Error("Verification token is required");
         error.statusCode = 400;
         throw error;
     }
     const hashedToken = crypto.createHash("sha256").update(token?.trim()).digest("hex");
-    const user = db.prepare("SELECT id, email_verified FROM users WHERE verify_token = ? AND verify_expiry > ? AND role = 'student'").get(hashedToken, Date.now());
+    const user = db.prepare("SELECT id, email_verified FROM users WHERE verify_token = ? AND verify_expiry > ? AND role = 'instructor'").get(hashedToken, Date.now());
     if (!user) {
         const error = new Error("Invalid or expired verification token");
         error.statusCode = 400;
         throw error;
     }
-    if(user.email_verified) {
+    if (user.email_verified) {
         const error = new Error("Email is already verified");
         error.statusCode = 400;
         throw error;
@@ -152,25 +162,26 @@ export const studentVerifyController = asyncHandler(async (req, res) => {
     });
 })
 
-export const studentProfileController = asyncHandler(async (req, res) => {
-    const { id, email, role } = req.student;
-    const studentUser = db.prepare("SELECT id, first_name, last_name, email, phone_number, role, created_at, updated_at FROM users WHERE id = ? AND role = 'student'").get(id);
-    if (!studentUser) {
-        const error = new Error("Student user not found");
+export const instructorProfileController = asyncHandler(async (req, res) => {
+    const { id } = req.instructor;
+    const instructorUser = db.prepare("SELECT id, first_name, last_name, email, phone_number, skills ,role, created_at, updated_at FROM instructors WHERE id = ? AND role = 'instructor'").get(id);
+    if (!instructorUser) {
+        const error = new Error("Instructor user not found");
         error.statusCode = 404;
         throw error;
     }
+    instructorUser.skills = JSON.parse(instructorUser.skills);
     res.status(200).json({
         status: "success",
         data: {
-            student: studentUser,
+            instructor: instructorUser,
         }
     });
 })
 
-export const studentLogoutController = asyncHandler(async (req, res) => {
-    res.status(200).clearCookie("studentToken", COOKIE_OPTIONS).json({
+export const instructorLogoutController = asyncHandler(async (req, res) => {
+    res.status(200).clearCookie("instructorToken", COOKIE_OPTIONS).json({
         status: "success",
-        message: "Student logged out successfully",
+        message: "Instructor logged out successfully",
     })
 })

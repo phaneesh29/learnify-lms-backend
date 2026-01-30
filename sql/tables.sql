@@ -157,11 +157,36 @@ CREATE TABLE IF NOT EXISTS lesson_progress (
     student_id INTEGER NOT NULL,
     completed BOOLEAN NOT NULL DEFAULT 0,
     completed_at TIMESTAMP,
-    UNIQUE (lesson_id, student_id), CHECK ((completed = 0 AND completed_at IS NULL) OR (completed = 1 AND completed_at IS NOT NULL)),
+    UNIQUE (lesson_id, student_id),
+    CHECK (
+        (
+            completed = 0
+            AND completed_at IS NULL
+        )
+        OR (
+            completed = 1
+            AND completed_at IS NOT NULL
+        )
+    ),
     FOREIGN KEY (lesson_id) REFERENCES lessons (id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS unique_admin_email
-ON users(email)
-WHERE role = 'admin';
+CREATE UNIQUE INDEX IF NOT EXISTS unique_admin_email ON users (email)
+WHERE
+    role = 'admin';
+
+CREATE VIEW instructors AS
+SELECT u.id, u.first_name, u.last_name, u.email, u.password_hash, u.phone_number, u.role, u.email_verified, u.created_at, u.updated_at, ip.admin_verified, COALESCE(
+        (
+            SELECT json_group_array(s.skill)
+            FROM instructor_skills s
+            WHERE
+                s.instructor_id = u.id
+        ), '[]'
+    ) AS skills
+FROM
+    users u
+    JOIN instructor_profile ip ON ip.user_id = u.id
+WHERE
+    u.role = 'instructor';

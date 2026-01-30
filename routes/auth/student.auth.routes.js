@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { loginLimiter } from "../../middlewares/loginRateLimiter.middleware.js";
-import { studentLoginController, studentRegisterController, studentResendVerifyEmailController, studentVerifyController } from "../../controllers/auth/student.auth.controller.js";
+import { studentLoginController, studentLogoutController, studentProfileController, studentRegisterController, studentResendVerifyEmailController, studentVerifyController } from "../../controllers/auth/student.auth.controller.js";
 import { verifyEmailLimiter } from "../../middlewares/verifyEmailLimiter.middleware.js";
+import { studentAuthMiddleware } from "../../middlewares/studentAuth.middleware.js";
 
 const router = Router();
 
@@ -9,7 +10,7 @@ router.post("/register", studentRegisterController)
 router.post("/login", loginLimiter, studentLoginController)
 router.post("/resend-email", verifyEmailLimiter, studentResendVerifyEmailController)
 router.post("/verify", studentVerifyController)
-// router.get("/profile", studentProfileController)
-// router.get("/logout", studentLogoutController)
+router.get("/profile", studentAuthMiddleware,studentProfileController)
+router.get("/logout", studentAuthMiddleware, studentLogoutController)
 
 export default router;

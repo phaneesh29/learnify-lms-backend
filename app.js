@@ -7,6 +7,11 @@ import { globalLimiter } from './middlewares/rateLimiter.middleware.js';
 import healthRouter from './routes/health.routes.js';
 import adminAuthRouter from './routes/auth/admin.auth.routes.js'
 import studentAuthRouter from './routes/auth/student.auth.routes.js'
+import instructorAuthRouter from './routes/auth/instructor.auth.routes.js'
+
+import adminRouter from './routes/admin.routes.js';
+import instructorRouter from './routes/instructor.routes.js';
+
 import { errorHandler } from './utils/errorHandler.js';
 
 const app = express();
@@ -32,6 +37,9 @@ app.use((req, _, next) => {
 app.use("/api/health", healthRouter)
 app.use("/api/auth/admin", adminAuthRouter)
 app.use("/api/auth/student", studentAuthRouter)
+app.use("/api/auth/instructor", instructorAuthRouter)
+app.use("/api/admin", adminRouter)
+app.use("/api/instructor", instructorRouter)
 
 app.use(errorHandler);
 
