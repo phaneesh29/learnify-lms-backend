@@ -30,19 +30,13 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use((req, _, next) => {
-    const ip = req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"]?.split(",")[0] || req.ip;
-    console.info(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${ip} UA="${req.headers["user-agent"]}"`);
-    next();
-});
-
 app.use("/api/health", healthRouter)
 app.use("/api/auth/admin", adminAuthRouter)
 app.use("/api/auth/student", studentAuthRouter)
 app.use("/api/auth/instructor", instructorAuthRouter)
 app.use("/api/admin", adminRouter)
 app.use("/api/instructor", instructorRouter)
-app.use("/api/course", courseRouter)
+app.use("/api/courses", courseRouter)
 
 app.use(errorHandler);
 

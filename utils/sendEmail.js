@@ -18,7 +18,7 @@ export const sendVerifyEmail = async ({ to }) => {
 
         db.prepare("UPDATE users SET verify_token = ?, verify_expiry = ? WHERE email = ?").run(hashedToken, verifyExpiry, to);
         const subject = "Verify your email address";
-        const text = `Hello ${user.first_name},\n\nPlease verify your email address by clicking the link below:\n\n${ORIGIN}/verify-email?token=${encodeURIComponent(token)}\nThis link will expire in 10 minutes.\n\nThank you!`;
+        const text = `Hello ${user.first_name},\n\nPlease verify your email address by clicking the link below:\n\n${ORIGIN}/verify-email?token=${encodeURIComponent(token)}\nThis link will expire in 10 minutes or copy the token below <br><p>${token}.</p><br>\n\nThank you!`;
         await sendEmail({ to, subject, text });
 
     } catch (error) {
