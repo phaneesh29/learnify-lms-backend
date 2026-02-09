@@ -14,7 +14,7 @@ export const instructorAuthMiddleware = asyncHandler((req, res, next) => {
 
         if (payload.role !== "instructor") {
             const err = new Error("Forbidden");
-            err.statusCode = 401;
+            err.statusCode = 403;
             throw err;
         }
 
