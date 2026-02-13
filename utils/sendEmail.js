@@ -25,3 +25,23 @@ export const sendVerifyEmail = async ({ to }) => {
         console.error("Error sending verification email:", error);
     }
 }
+
+export const sendPasswordResetEmail = async ({ to }) => {
+    try {
+        const user = db.prepare("SELECT first_name, email FROM users WHERE email = ?").get(to);
+        if (!user) {
+            return;
+        }
+        const token = crypto.randomBytes(32).toString("hex");
+        const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+        const resetExpiry = Date.now() + 10 * 60 * 1000;
+
+        db.prepare("UPDATE users SET password_reset_token = ?, password_reset_expiry = ?, updated_at = CURRENT_TIMESTAMP WHERE email = ?").run(hashedToken, resetExpiry, to);
+        const subject = "Reset your password";
+        const text = `Hello ${user.first_name},\n\nYou requested a password reset. Use the link below to reset your password:\n\n${ORIGIN}/reset-password?token=${encodeURIComponent(token)}\nThis link will expire in 10 minutes or copy the token below <br><p>${token}.</p><br>\n\nIf you did not request this, please ignore this email.\n\nThank you!`;
+        await sendEmail({ to, subject, text });
+
+    } catch (error) {
+        console.error("Error sending password reset email:", error);
+    }
+}

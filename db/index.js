@@ -10,6 +10,7 @@ const dbPath = path.join(__dirname, "learnify.db");
 const db = new Database(dbPath);
 
 db.pragma("journal_mode = WAL");
+db.pragma("busy_timeout = 5000");
 db.pragma("foreign_keys = ON");
 
 export default db;

@@ -20,12 +20,13 @@ const app = express();
 app.set("trust proxy", true);
 app.disable("x-powered-by");
 
-app.use(globalLimiter)
-
 app.use(cors({
-    origin: [ORIGIN,"http://127.0.0.1:5500"],
+    origin: [ORIGIN, "http://127.0.0.1:5500"],
     credentials: true,
 }));
+
+app.use(globalLimiter)
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

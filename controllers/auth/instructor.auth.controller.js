@@ -1,9 +1,9 @@
 import * as z from "zod"
 import crypto from "crypto"
-import { InstructorLoginSchema, InstructorRegisterSchema } from "../../models/instructorSchema.model.js"
+import { InstructorLoginSchema, InstructorRegisterSchema, InstructorForgotPasswordSchema, InstructorResetPasswordSchema, InstructorUpdateProfileSchema } from "../../models/instructorSchema.model.js"
 import { ResendSchema } from "../../models/resndEmailSchema.model.js"
 import { asyncHandler } from "../../utils/apiHandler.js"
-import { sendVerifyEmail } from "../../utils/sendEmail.js"
+import { sendVerifyEmail, sendPasswordResetEmail } from "../../utils/sendEmail.js"
 import db from "../../db/index.js"
 import { comparePassword, hashedPassword } from "../../utils/hashPassword.js"
 import { generateToken } from "../../utils/genrateToken.js"
@@ -183,5 +183,93 @@ export const instructorLogoutController = asyncHandler(async (req, res) => {
     res.status(200).clearCookie("instructorToken", COOKIE_OPTIONS).json({
         status: "success",
         message: "Instructor logged out successfully",
+    })
+})
+
+export const instructorForgotPasswordController = asyncHandler(async (req, res) => {
+    const body = InstructorForgotPasswordSchema.safeParse(req.body)
+    if (!body.success) {
+        const error = new Error(z.prettifyError(body.error))
+        error.statusCode = 400
+        throw error
+    }
+    const { email } = body.data
+    const instructorUser = db.prepare("SELECT id, email FROM users WHERE email = ? AND role = 'instructor'").get(email)
+
+    if (instructorUser) {
+        try {
+            await sendPasswordResetEmail({ to: email });
+        } catch (err) {
+            console.error("Password reset email failed:", err);
+        }
+    }
+    res.status(200).json({
+        status: "success",
+        message: "If an account exists with this email, a password reset link has been sent.",
+    })
+})
+
+export const instructorResetPasswordController = asyncHandler(async (req, res) => {
+    const body = InstructorResetPasswordSchema.safeParse(req.body)
+    if (!body.success) {
+        const error = new Error(z.prettifyError(body.error))
+        error.statusCode = 400
+        throw error
+    }
+    const { token, password } = body.data
+    const hashedToken = crypto.createHash("sha256").update(token.trim()).digest("hex")
+    const user = db.prepare("SELECT id FROM users WHERE password_reset_token = ? AND password_reset_expiry > ? AND role = 'instructor'").get(hashedToken, Date.now())
+    if (!user) {
+        const error = new Error("Invalid or expired reset token")
+        error.statusCode = 400
+        throw error
+    }
+    const passwordHash = await hashedPassword(password)
+    db.prepare("UPDATE users SET password_hash = ?, password_reset_token = NULL, password_reset_expiry = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(passwordHash, user.id)
+    res.status(200).json({
+        status: "success",
+        message: "Password reset successfully",
+    })
+})
+
+export const instructorUpdateProfileController = asyncHandler(async (req, res) => {
+    const body = InstructorUpdateProfileSchema.safeParse(req.body)
+    if (!body.success) {
+        const error = new Error(z.prettifyError(body.error))
+        error.statusCode = 400
+        throw error
+    }
+    const { first_name, last_name, phone_number } = body.data
+    if (!first_name && !last_name && !phone_number) {
+        const error = new Error("At least one field is required to update")
+        error.statusCode = 400
+        throw error
+    }
+    const { id } = req.instructor
+    const fields = []
+    const values = []
+    if (first_name) { fields.push("first_name = ?"); values.push(first_name) }
+    if (last_name) { fields.push("last_name = ?"); values.push(last_name) }
+    if (phone_number) { fields.push("phone_number = ?"); values.push(phone_number) }
+    fields.push("updated_at = CURRENT_TIMESTAMP")
+    values.push(id)
+    try {
+        const result = db.prepare(`UPDATE users SET ${fields.join(", ")} WHERE id = ? AND role = 'instructor'`).run(...values)
+        if (result.changes === 0) {
+            const error = new Error("Instructor not found")
+            error.statusCode = 404
+            throw error
+        }
+    } catch (e) {
+        if (e.code === "SQLITE_CONSTRAINT_UNIQUE") {
+            const err = new Error("Phone number already in use");
+            err.statusCode = 409;
+            throw err;
+        }
+        throw e;
+    }
+    res.status(200).json({
+        status: "success",
+        message: "Profile updated successfully",
     })
 })

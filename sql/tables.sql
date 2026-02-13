@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS users (
     email_verified BOOLEAN NOT NULL DEFAULT 0,
     verify_token TEXT DEFAULT NULL,
     verify_expiry TIMESTAMP DEFAULT NULL,
+    password_reset_token TEXT DEFAULT NULL,
+    password_reset_expiry TIMESTAMP DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -38,6 +40,7 @@ CREATE TABLE IF NOT EXISTS courses (
     id INTEGER PRIMARY KEY,
     title TEXT NOT NULL,
     description TEXT,
+    intro_link TEXT,
     price INTEGER NOT NULL,
     duration_hours INTEGER NOT NULL CHECK (duration_hours > 0),
     start_date DATE NOT NULL,
@@ -172,11 +175,24 @@ CREATE TABLE IF NOT EXISTS lesson_progress (
     FOREIGN KEY (student_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS deleted_users (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone_number TEXT,
+    role TEXT NOT NULL,
+    deleted_by INTEGER NOT NULL,
+    deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (deleted_by) REFERENCES users (id)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS unique_admin_email ON users (email)
 WHERE
     role = 'admin';
 
-CREATE VIEW instructors AS
+CREATE VIEW IF NOT EXISTS instructors AS
 SELECT u.id, u.first_name, u.last_name, u.email, u.password_hash, u.phone_number, u.role, u.email_verified, u.created_at, u.updated_at, ip.admin_verified, COALESCE(
         (
             SELECT json_group_array(s.skill)
@@ -190,3 +206,72 @@ FROM
     JOIN instructor_profile ip ON ip.user_id = u.id
 WHERE
     u.role = 'instructor';
+
+
+CREATE VIEW IF NOT EXISTS course_details AS
+SELECT
+    c.id,
+    c.title,
+    c.description,
+    c.intro_link,
+    c.price,
+    c.duration_hours,
+    c.start_date,
+    c.end_date,
+    c.is_published,
+    c.rating,
+    c.created_at,
+    c.updated_at,
+    c.created_by,
+    COALESCE(
+        (
+            SELECT json_group_array(
+                    json_object(
+                        'id', i.id, 'first_name', i.first_name, 'last_name', i.last_name, 'email', i.email
+                    )
+                )
+            FROM
+                course_instructors ci
+                JOIN instructors i ON i.id = ci.instructor_id
+            WHERE
+                ci.course_id = c.id
+        ),
+        '[]'
+    ) AS instructors,
+    COALESCE(
+        (
+            SELECT json_group_array(
+                    json_object(
+                        'id', cs.id,
+                        'title', cs.title,
+                        'position', cs.position,
+                        'lessons', json(
+                            COALESCE(
+                                (
+                                    SELECT json_group_array(
+                                            json_object(
+                                                'id', l.id,
+                                                'title', l.title,
+                                                'content_type', l.content_type,
+                                                'content_url', l.content_url,
+                                                'duration_minutes', l.duration_minutes,
+                                                'is_preview', l.is_preview,
+                                                'position', l.position
+                                            )
+                                        )
+                                    FROM lessons l
+                                    WHERE
+                                        l.section_id = cs.id
+                                ),
+                                '[]'
+                            )
+                        )
+                    )
+                )
+            FROM course_sections cs
+            WHERE
+                cs.course_id = c.id
+        ),
+        '[]'
+    ) AS sections
+FROM courses c;

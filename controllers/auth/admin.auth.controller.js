@@ -1,6 +1,6 @@
 import * as z from "zod"
 import { asyncHandler } from "../../utils/apiHandler.js"
-import { AdminLoginSchema, AdminRegisterSchema } from "../../models/adminSchema.model.js"
+import { AdminLoginSchema, AdminRegisterSchema, AdminChangePasswordSchema } from "../../models/adminSchema.model.js"
 import db from "../../db/index.js"
 import { comparePassword, hashedPassword } from "../../utils/hashPassword.js"
 import { generateToken } from "../../utils/genrateToken.js"
@@ -106,5 +106,34 @@ export const adminLogoutController = asyncHandler(async (req, res) => {
     res.status(200).clearCookie("adminToken", COOKIE_OPTIONS).json({
         status: "success",
         message: "Admin logged out successfully",
+    })
+})
+
+export const adminChangePasswordController = asyncHandler(async (req, res) => {
+    const body = AdminChangePasswordSchema.safeParse(req.body)
+    if (!body.success) {
+        const error = new Error(z.prettifyError(body.error))
+        error.statusCode = 400
+        throw error
+    }
+    const { old_password, new_password } = body.data
+    const { id } = req.admin
+    const adminUser = db.prepare("SELECT id, password_hash FROM users WHERE id = ? AND role = 'admin'").get(id)
+    if (!adminUser) {
+        const error = new Error("Admin user not found")
+        error.statusCode = 404
+        throw error
+    }
+    const isPasswordValid = await comparePassword(old_password, adminUser.password_hash)
+    if (!isPasswordValid) {
+        const error = new Error("Old password is incorrect")
+        error.statusCode = 401
+        throw error
+    }
+    const passwordHash = await hashedPassword(new_password)
+    db.prepare("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(passwordHash, id)
+    res.status(200).json({
+        status: "success",
+        message: "Password changed successfully",
     })
 })
