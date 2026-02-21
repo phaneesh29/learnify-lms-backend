@@ -12,6 +12,9 @@ import instructorAuthRouter from './routes/auth/instructor.auth.routes.js'
 import adminRouter from './routes/admin.routes.js';
 import instructorRouter from './routes/instructor.routes.js';
 import courseRouter from './routes/course.routes.js';
+import feedbackRouter from './routes/feedback.routes.js';
+import couponRouter from './routes/coupon.routes.js';
+import enrollmentRouter from './routes/enrollment.routes.js';
 
 import { errorHandler } from './utils/errorHandler.js';
 
@@ -38,6 +41,9 @@ app.use("/api/auth/instructor", instructorAuthRouter)
 app.use("/api/admin", adminRouter)
 app.use("/api/instructor", instructorRouter)
 app.use("/api/courses", courseRouter)
+app.use("/api/feedback", feedbackRouter)
+app.use("/api/coupons", couponRouter)
+app.use("/api/enroll", enrollmentRouter)
 
 app.use(errorHandler);
 

@@ -84,6 +84,9 @@ CREATE TABLE IF NOT EXISTS payments (
     id INTEGER PRIMARY KEY,
     enrollment_id INTEGER UNIQUE NOT NULL,
     amount INTEGER NOT NULL CHECK (amount >= 0),
+    original_amount INTEGER,
+    coupon_id INTEGER DEFAULT NULL,
+    discount_applied INTEGER DEFAULT 0,
     gateway_reference TEXT,
     payment_status TEXT CHECK (
         payment_status IN (
@@ -94,7 +97,8 @@ CREATE TABLE IF NOT EXISTS payments (
     ) NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP,
-    FOREIGN KEY (enrollment_id) REFERENCES enrollments (id) ON DELETE CASCADE
+    FOREIGN KEY (enrollment_id) REFERENCES enrollments (id) ON DELETE CASCADE,
+    FOREIGN KEY (coupon_id) REFERENCES coupons (id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS course_sections (
@@ -186,6 +190,61 @@ CREATE TABLE IF NOT EXISTS deleted_users (
     deleted_by INTEGER NOT NULL,
     deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (deleted_by) REFERENCES users (id)
+);
+
+CREATE TABLE IF NOT EXISTS coupons (
+    id INTEGER PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    description TEXT,
+    discount_percent INTEGER NOT NULL CHECK (discount_percent BETWEEN 1 AND 100),
+    max_discount_amount INTEGER DEFAULT NULL,
+    min_order_amount INTEGER NOT NULL DEFAULT 0 CHECK (min_order_amount >= 0),
+    max_uses INTEGER NOT NULL DEFAULT 1 CHECK (max_uses > 0),
+    used_count INTEGER NOT NULL DEFAULT 0 CHECK (used_count >= 0),
+    max_uses_per_user INTEGER NOT NULL DEFAULT 1 CHECK (max_uses_per_user > 0),
+    course_id INTEGER DEFAULT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT 1,
+    valid_from TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    valid_until TIMESTAMP NOT NULL,
+    created_by INTEGER NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (valid_until > valid_from),
+    FOREIGN KEY (course_id) REFERENCES courses (id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by) REFERENCES users (id)
+);
+
+CREATE TABLE IF NOT EXISTS coupon_usage (
+    id INTEGER PRIMARY KEY,
+    coupon_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    payment_id INTEGER NOT NULL,
+    discount_applied INTEGER NOT NULL CHECK (discount_applied > 0),
+    used_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (coupon_id) REFERENCES coupons (id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    FOREIGN KEY (payment_id) REFERENCES payments (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    category TEXT NOT NULL CHECK (
+        category IN (
+            'general',
+            'course_content',
+            'platform_issue',
+            'instructor',
+            'suggestion',
+            'complaint'
+        )
+    ) DEFAULT 'general',
+    message TEXT NOT NULL,
+    rating INTEGER CHECK (rating BETWEEN 1 AND 5),
+    is_read BOOLEAN NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS unique_admin_email ON users (email)
